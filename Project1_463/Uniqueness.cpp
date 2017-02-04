@@ -1,3 +1,9 @@
+/*
+Created by: Austin Fisher
+Class:	    CSCE 463
+Section:    500
+File:       Uniqueness.cpp
+*/
 #include "Uniqueness.h"
 #include "stdafx.h"
 

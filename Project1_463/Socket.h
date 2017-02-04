@@ -1,3 +1,9 @@
+/*
+Created by: Austin Fisher
+Class:	    CSCE 463
+Section:    500
+File:       Socket.h
+*/
 #pragma once
 #include "stdafx.h"
 

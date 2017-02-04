@@ -1,3 +1,9 @@
+/*
+Created by: Austin Fisher
+Class:	    CSCE 463
+Section:    500
+File:       thread_safe_storage.h
+*/
 #pragma once
 #include "stdafx.h"
 class thread_safe_storage

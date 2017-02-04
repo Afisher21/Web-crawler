@@ -1,10 +1,16 @@
+/*
+Created by: Austin Fisher
+Class:	    CSCE 463
+Section:    500
+File:       stdafx.h
+*/
 #pragma once
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <vector>
 #include <stdio.h>
 #include <iostream>
 #include <string.h>
-#include <stdlib.h>
+#include <stdlib.h>s
 #include <string>
 #include <WinSock2.h>
 #include <Windows.h>
