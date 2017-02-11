@@ -10,7 +10,7 @@ File:       stdafx.h
 #include <stdio.h>
 #include <iostream>
 #include <string.h>
-#include <stdlib.h>s
+#include <stdlib.h>
 #include <string>
 #include <WinSock2.h>
 #include <Windows.h>

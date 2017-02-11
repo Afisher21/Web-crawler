@@ -8,25 +8,17 @@
 #include "Socket.h"
 #include "Uniqueness.h"
 #include "HTMLParserBase.h"
+#include "thread_safe_storage.h"
+#include "CommonStructs.h"
 #include "stdafx.h"
-
 #include <fstream>
 
 
-using namespace std;
-struct UrlObj {
-	bool invalid = false;
-	string scheme;
-	string host;
-	int port = 80;
-	string path = "/"; // Initial value if no path provided
-	string query;
-	string request() {
-		return path + query;
-	}
-};
 UrlObj parse_url(string url);
-bool connect_verify(UrlObj &input,Socket &sock, string method, int valid_code, int maximum_size, int maximum_time);
+bool connect_verify(UrlObj &input, Socket &sock, string method, int &valid_code, int maximum_size, int maximum_time);
+UINT status_thread(LPVOID pParam);
+UINT url_producer_thread(LPVOID pParam);
+UINT url_crawler_thread(LPVOID pParam);
 
 int main(int argc, char **argv)
 {
@@ -40,9 +32,6 @@ int main(int argc, char **argv)
 		WSACleanup();
 		return -1;
 	}
-	if (argc == 2) {
-		url = string(argv[1]);
-	}
 	if (argc > 3 || argc < 2) {
 		printf("Unknown parameters!\n");
 		printf("USAGE:\n  winsock.exe scheme://host[:port][/path][?query][#fragment]\n");
@@ -52,174 +41,41 @@ int main(int argc, char **argv)
 	}
 	int thread_count = 1;
 	vector<string> urls;
-	if (argc == 3) {
-		if (strcmp(argv[1],"1") != 0) {
-			printf("USAGE: Currently only 1 thread is supported.\n");
-			cin.ignore();
-			return 2;
-		}
-		try {
-			thread_count = stoi(argv[1]);
-		}
-		catch (...) {
-			printf("USAGE: winsock.exe <# of threads> <File_name of file listing urls>\n");
-			return 3;
-		}
-
-		// Open and load file into memory, set number of threads to run.
-		ifstream file(argv[2]);
-		if (!file.is_open()) {
-			printf("Unable to open file.\n");
-			return 4;
-		}
-		string line;
-		while(getline(file,line))
-		{
-			// Add lines in file to url database
-			urls.push_back(line);
-		}
+	try {
+		thread_count = stoi(argv[1]);
+	}
+	catch (...) {
+		printf("USAGE: winsock.exe <# of threads> <File_name of file listing urls>\n");
+		return 3;
+	}
+	Parameters p;
+	// Open and load file into memory, set number of threads to run.
+	ifstream file(argv[2]);
+	if (!file.is_open()) {
+		printf("Unable to open file.\n");
+		return 4;
+	}
+	string line;
+	while (getline(file, line))
+	{
+		// Add lines in file to url database
+		p.urls.add(line);
 	}
 	Socket sock;
 	Uniqueness checkUnique;
-	int nextUrl = 0;
-	do {
-		if (argc == 3) {
-			if (nextUrl == urls.size()) {
-				// IF you have processed all strings, terminate
-				break;
-			}
-			url = urls.at(nextUrl++);
-			try {
-				sock.Refresh();
-			}
-			catch (...) {
-				// Sock throws an error if unable to allcoate memory
-				break;
-			}
-		}
-
-		UrlObj inputUrl;
-		printf("URL: %s\n", url.c_str());
-		printf("    Parsing URL ...");
-		inputUrl = parse_url(url);
-		if (inputUrl.invalid) {
-			if (argc == 2) {
-				break;
-			}
-			else {
-				continue;
-			}
-		}
-		if (argc == 2) {
-			printf(" host %s, port %i, request %s\n", inputUrl.host.c_str(), inputUrl.port, inputUrl.request().c_str());
-		}
-		else{
-			printf(" host %s, port %i\n", inputUrl.host.c_str(), inputUrl.port);
-		}
-		if (argc == 3) {
-			// Check if host is unique
-			printf("    Checking uniqueness of host...");
-			if (checkUnique.host(inputUrl.host)) {
-				// Host is unique
-				printf(" passed.\n");
-			}
-			else {
-				// Non-unique host, terminate so you don't spam it
-				printf(" failed.\n");
-				continue;
-			}
-		}
-		printf("    Doing DNS... ");
-
-		if (!sock.Open()) {
-			printf("Failed to open socket!\n");
-			if (argc == 2) {
-				break;
-			}
-			else {
-				continue;
-			}
-		}
-
-		// Transform DNS
-		DWORD t = timeGetTime();
-
-		if (!sock.DNS(inputUrl.host.c_str())) {
-			printf("Failed to lookup DNS! \n");
-			if (argc == 2) {
-				break;
-			}
-			else {
-				continue;
-			}
-		}
-		char *ip_addr_str = inet_ntoa(sock.server.sin_addr);
-		printf("done in %d ms, found %s\n", timeGetTime() - t, ip_addr_str);
-		string method="GET";
-		// return size -1 indicates no maximum
-		int good_status_code = 200, max_return_size = -1;
-		if (argc == 3) {
-			printf("    Checking uniqueness of ip... ");
-			// verify uniqueness of DNS
-			if (checkUnique.IP(inet_addr(ip_addr_str))) {
-				printf(" passed.\n");
-				method = "HEAD";
-				good_status_code = 400;
-				max_return_size = 16000;
-			}
-			else {
-				printf(" failed.\n");
-				continue;
-			}
-		}
-
-		if (!connect_verify(inputUrl, sock, method, good_status_code, max_return_size, (argc==3)?10:-1)) {
-			if (argc == 3) {
-				continue;
-			}
-			else {
-				break;
-			}
-		}
-		if (argc == 3) {
-			// connect to download page
-			sock.Refresh();
-			sock.Open();
-			if (!connect_verify(inputUrl, sock, "GET", 200, 2000000, 10)) {
-				continue;
-			}
-		}
-		
-		printf("  + Parsing page... ");
-		// Parse page for links
-		t = timeGetTime();
-		HTMLParserBase *parser = new HTMLParserBase;
-		int nLinks;
-		char *linkBuffer = parser->Parse(sock.buf, sock.curPos, argv[1], strlen(argv[1]), &nLinks);
-
-		// check for errors indicated by negative values
-		if (nLinks < 0)
-			nLinks = 0;
-
-		printf("done in %d ms with %i links\n\n", timeGetTime() - t, nLinks);
-		if (argc == 2) {
-			break;
-		}
-	}while (true);
-	// get current time; link with winmm.lib
-	if (argc == 2) {
-		printf("\n======================================\n");
-		//printf("%.*s\n",mySock.curPos,mySock.buf);
-		auto headers = strstr(sock.buf, "\r\n\r\n");
-
-		printf("%.*s\n", headers - sock.buf, sock.buf);
-		/*FILE *fp;
-		fopen_s(&fp, string(inputUrl.host + ".html").c_str(), "wb");
-		fwrite(mySock.buf, 1, mySock.curPos, fp);
-		fclose(fp);*/
-
+	HANDLE *handles = new HANDLE[thread_count + 1];  // +1 for stats thread
+	handles[0] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)status_thread, &p, 0, NULL);
+	for (int i = 1; i <= thread_count; ++i) {
+		handles[i] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)url_crawler_thread, &p, 0, NULL);
 	}
-	// call cleanup when done with everything and ready to exit program
+
+	// make sure this thread hangs here until the other three quit; otherwise, the program will terminate prematurely
+	for (int i = 0; i <= thread_count; i++)
+	{
+		WaitForSingleObject(handles[i], INFINITE);
+		CloseHandle(handles[i]);
+	}
+
 	WSACleanup();
 	cin.ignore();
 	return 0;
@@ -231,13 +87,11 @@ UrlObj parse_url(string url)
 
 	int scheme_end = url.find("://");
 	if (scheme_end == string::npos) {
-		printf("Could not find '://'! Are you sure you input a valid address?\n");
 		inputUrl.invalid = true;
 		return inputUrl;
 	}
 	inputUrl.scheme = url.substr(0, scheme_end);
 	if (inputUrl.scheme != "http") {
-		printf("Invalid scheme, only 'http' is accepted\n");
 		inputUrl.invalid = true;
 		return inputUrl;
 	}
@@ -281,7 +135,6 @@ UrlObj parse_url(string url)
 				inputUrl.port = stoi(port);
 			}
 			catch (...) {
-				printf("Could not convert port to number! Are you sure it is correct?\n");
 				inputUrl.invalid = true;
 				return inputUrl;
 			}
@@ -302,42 +155,29 @@ UrlObj parse_url(string url)
 	return inputUrl;
 }
 
-bool connect_verify(UrlObj & input, Socket &sock, string method, int valid_code, int maximum_size, int maximum_time)
+bool connect_verify(UrlObj & input, Socket &sock, string method, int &valid_code, int maximum_size, int maximum_time)
 {
-	// method should be either "GET" or "HEAD"
-	
-	string con = (method == "GET") ? "page" : "robots";
-	string asterisk = (method == "GET") ? "*" : " ";
-	printf("  %s Connecting on %s... ", asterisk.c_str(), con.c_str());
-	// Connect to page
-	DWORD t = timeGetTime();
 	// connect to the server on the requested port
 	if (!sock.Connect(input.port)) {
-		printf("Failed to connect to port!\n");
+		valid_code = -1;
 		return false;
 	}
-	printf("done in %d ms\n", timeGetTime() - t);
-	printf("    Loading... ");
-	
+
 	// Download result
-	//string get_http = "GET " + inputUrl.request() + " HTTP/1.0\r\nHost: " + inputUrl.host + "\r\nUser-agent: FisherTAMUcrawler/1.1\r\nConnection: close\r\n\r\n";
 	string request = (method == "GET") ? input.request() : "/robots.txt";
 	string get_http = method + " " + request + " HTTP/1.0\r\nHost: " + input.host + "\r\nUser-agent: FisherTAMUcrawler/1.2\r\nConnection: close\r\n\r\n";
-	t = timeGetTime();
 	if (!sock.Write(get_http.c_str())) {
 		return false;
 	}
 	if (!sock.Read(maximum_time, maximum_size)) {
 		return false;
 	}
-	printf("done in %d ms with %i bytes\n", timeGetTime() - t, sock.curPos);
-	printf("    Verifying header... ");
 
 	// Check header code
 	auto status = strstr(sock.buf, "HTTP/");
 	if (status == NULL) {
 		// Fail out of checking header code
-		printf(" irregular location of status code, unable to parse!\n");
+		valid_code = 0;
 		return false;
 	}
 	int status_code = -1;
@@ -345,12 +185,172 @@ bool connect_verify(UrlObj & input, Socket &sock, string method, int valid_code,
 		status_code = stoi(status + 9);
 	}
 	catch (...) {
-		printf("Problem retriving status code from response!\n");
+		valid_code = 0;
 		return false;
 	}
-	printf("status code %d\n", status_code);
 	if (status_code < valid_code || status_code >= valid_code + 100) {
+		valid_code = status_code;
 		return false;
 	}
 	return true;
+}
+
+UINT status_thread(LPVOID pParam)
+{
+	Parameters *p = ((Parameters*)pParam);
+	/// Expected output
+	//
+	//[  6] 500 Q 992142 E 7862 H 1790 D 1776 I 1264 R 544 C 190 L 5K
+	//		*** crawling 87.5 pps @ 12.3 Mbps
+	long prevDownloaded = 0;
+	int prevExtractedPages = 0;
+	DWORD prevTime = 0;
+	DWORD startTime = timeGetTime();
+	while (!p->urls.finished || p->threadCount()>0) {
+		// It takes a few milliseconds for the above code to run, so sleep until the next wakeup would occur at 2 seconds
+		// This does not account for timing errors like the computer waking the program after 2050 ms when 2000 was requested
+		DWORD sleepTime = 2000;
+		Sleep(sleepTime);
+		/// Variables:
+		/*
+		First column is elapsed time in seconds, 3 character alignment
+		Q: current size of the pending queue
+		E: number of extracted URLs from the queue
+		H: number of URLs that have passed host uniqueness
+		D: number of successful DNS lookups
+		I: number of URLs that have passed IP uniqueness
+		R: number of URLs that have passed robots checks
+		C: number of successfully crawled URLs(those with a valid HTTP code)
+		L: total links found
+		*/
+		double wakeUpTime = timeGetTime();
+		double timeSinceInitialized = (wakeUpTime - startTime) / 1000;
+		double deltaSeconds = timeSinceInitialized - prevTime; // Amount of seconds since last wakeup
+		int remaining = p->urls.remaining();
+		long downloadedBytes = p->downloadedBytes();
+		long bps = (downloadedBytes - prevDownloaded)/ deltaSeconds; // bytes downloaded since last check
+		long _Mbps = (bps * 8) / 1000000; // convert MB to b
+		int extractedPages = p->totalPages();
+		double pagesPerSecond = (deltaSeconds == 0)?0:(extractedPages - prevExtractedPages) / deltaSeconds;
+		printf("[%3.0f]  %ld  Q %6d  E %7d  H %6d  D %6ld  I %5d  R %5ld  C %5ld L %4ld\n\t*** crawling %.1d pps @ %.1ld Mbps\n",
+			timeSinceInitialized,								// [%3f]   Elapsed time
+			p->threadCount(),									//		   Number of threads currently running
+			remaining,											// Q	   Size of pending queue
+			extractedPages,										// E	   Number of extracted URLs from queue
+			p->unique.hostCount(),								// H	   Number of unique hosts so far
+			p->succesfulDnsCount(),								// D       Number of successful DNS lookups
+			p->unique.ipCount(),								// I	   Number of unique IP addresses
+			p->succesfulRobotCount(),							// R	   Number of URLs without robots.txt
+			p->totalTwoHundredCount(),							// C	   Number of successfully crawled URLs
+			p->totalLinkCount(),								// L	   Total number of links found
+			pagesPerSecond,										// pps
+			_Mbps												// bps
+			);
+		prevDownloaded = downloadedBytes;
+		prevExtractedPages = extractedPages;
+		prevTime = timeSinceInitialized;
+	}
+
+	// Print final stats
+	DWORD finalTime = (timeGetTime() - startTime)/1000;
+	DWORD rate = p->urls.size() / finalTime;
+	printf("Total elapsed time: %.2ds\n", finalTime);
+	printf("Extracted %d URLs @ %.1ld/s\n",p->urls.size(), rate);
+	rate = p->succesfulDnsCount() / finalTime;
+	printf("Looked up %d DNS names @ %.1d/s\n", p->succesfulDnsCount(), rate);
+	rate = p->succesfulRobotCount() / finalTime;
+	printf("Downloaded %d robots @ %.1ld/s\n", p->succesfulRobotCount(), rate);
+	rate = p->totalPages() / finalTime;
+	printf("Crawled %d pages @ %.1ld/s\n", p->totalPages(), rate);
+	rate = p->totalLinkCount() / finalTime;
+	printf("Parsed %d links @ %.1ld/s\n", p->totalLinkCount(), rate);
+	printf("HTTP codes: 2xx = %d, 3xx = %d, 4xx = %d, 5xx = %d, other = %d\n", p->totalTwoHundredCount(),
+		p->totalThreeHundredCount(), p->totalFourHundredCount(),
+		p->totalFiveHundredCount(),p->totalOtherCount());
+
+	return 0;
+}
+
+UINT url_producer_thread(LPVOID pParam)
+{
+	Parameters *p = ((Parameters*)pParam);
+	return 0;
+}
+
+UINT url_crawler_thread(LPVOID pParam)
+{
+	Parameters *p = ((Parameters*)pParam);
+	p->incrementThreadCount();
+	HTMLParserBase *parser = new HTMLParserBase;
+	Socket sock;
+	do {
+		sock.Refresh();
+		string url;
+		if (p->urls.read(url) == -1) {
+			// No more urls to read!
+			break;
+		}
+		UrlObj inputUrl;
+		inputUrl = parse_url(url);
+		if (inputUrl.invalid) {
+			// If failed to parse URL, start over and grab a new one
+			continue;
+		}
+		if (!p->unique.host(inputUrl.host)) {
+			continue;
+		}
+		if (!sock.Open()) {
+			continue;
+		}
+
+		// Transform DNS
+
+		if (!sock.DNS(inputUrl.host.c_str())) {
+			continue;
+		}
+		p->incrementDns();
+		// verify uniqueness of DNS
+		char *ip_addr_str = inet_ntoa(sock.server.sin_addr);
+		if (!p->unique.IP(inet_addr(ip_addr_str))) {
+			continue;
+		}
+		string method = "HEAD";
+		int good_status_code = 400, max_return_size = 16000;
+		if (!connect_verify(inputUrl, sock, method, good_status_code, max_return_size, 10)) {
+			continue;
+		}
+		p->incrementRobots();
+		// connect to download page
+		sock.Refresh();
+		sock.Open();
+		int returnCode = 200;
+		if (!connect_verify(inputUrl, sock, "GET", returnCode, 2000000, 10)) {
+			if (returnCode >= 300 && returnCode < 400)
+				p->incrementThreeXX();
+			else if (returnCode >= 400 && returnCode < 500)
+				p->incrementFourXX();
+			else if (returnCode >= 500 && returnCode < 600)
+				p->incrementFiveXX();
+			else if (returnCode > 0 )
+				p->incrementOther();
+			p->increaseDownloadCount(sock.curPos);
+			continue;
+		}
+		p->incrementTwoXX();
+		p->increaseDownloadCount(sock.curPos);
+		// Parse page for links
+		int nLinks;
+		char *linkBuffer = parser->Parse(sock.buf, sock.curPos, _strdup(url.c_str()), url.size(), &nLinks);
+
+		// check for errors indicated by negative values
+		if (nLinks < 0)
+			nLinks = 0;
+		long linkCount = (long)nLinks;
+		p->addLink(linkCount);
+	} while (true);
+
+
+
+	p->decrementThreadCount();
+	return 0;
 }

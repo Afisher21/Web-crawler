@@ -121,6 +121,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\..\Downloads\HTMLParserTest\HTMLParserTest\HTMLParserTest\HTMLParserBase.h" />
+    <ClInclude Include="CommonStructs.h" />
     <ClInclude Include="Socket.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="thread_safe_storage.h" />

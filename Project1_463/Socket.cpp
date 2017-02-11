@@ -60,19 +60,13 @@ bool Socket::Read(int max_time, int max_size)
 	DWORD startTime = timeGetTime();
 	while (true)
 	{
-		if (max_time != -1) {
 			// *1000 to convert from seconds to milliseconds
 			if (timeGetTime() - startTime > max_time * 1000) {
-				printf("timed out.\n");
 				return false;
 			}
-		}
-		if (max_size != -1) {
 			if (curPos > max_size) {
-				printf("exceeded maximum file size.\n");
 				return false;
 			}
-		}
 		FD_ZERO(&fd);
 		FD_SET(sock, &fd);
 		// wait to see if socket has any data (see MSDN)
@@ -106,7 +100,6 @@ bool Socket::Read(int max_time, int max_size)
 		}
 		else {
 			// report timeout
-			printf("failed due to time out\n");
 			break;
 		}
 	}
@@ -123,7 +116,6 @@ bool Socket::DNS(const char host[])
 		// if not a valid IP, then do a DNS lookup
 		if ((remote = gethostbyname(host)) == NULL)
 		{
-			printf("failed with invalid string: neither FQDN, nor IP address\n");
 			return false;
 		}
 		else // take the first IP address and copy into sin_addr

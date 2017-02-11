@@ -11,11 +11,11 @@ File:       Uniqueness.cpp
 
 bool Uniqueness::IP(DWORD ip)
 {
-	EnterCriticalSection(&ip_mutex);
+	EnterCriticalSection(&ipMutex);
 	size_t prevSize = seenIps.size();
 	seenIps.insert(ip);
 	size_t newSize = seenIps.size();
-	LeaveCriticalSection(&ip_mutex);
+	LeaveCriticalSection(&ipMutex);
 	if (newSize > prevSize)
 		return true;
 	return false;
@@ -23,27 +23,43 @@ bool Uniqueness::IP(DWORD ip)
 
 bool Uniqueness::host(std::string host)
 {
-	EnterCriticalSection(&host_mutex);
+	EnterCriticalSection(&hostMutex);
 	size_t prevSize = seenHosts.size();
 	seenHosts.insert(host);
 	size_t newSize = seenHosts.size();
-	LeaveCriticalSection(&host_mutex);
+	LeaveCriticalSection(&hostMutex);
 	if (newSize > prevSize)
 		return true;
 	return false;
+}
+
+int Uniqueness::ipCount(void)
+{
+	EnterCriticalSection(&ipMutex);
+	int count = seenIps.size();
+	LeaveCriticalSection(&ipMutex);
+	return count;
+}
+
+int Uniqueness::hostCount(void)
+{
+	EnterCriticalSection(&hostMutex);
+	int count = seenHosts.size();
+	LeaveCriticalSection(&hostMutex);
+	return count;
 }
 
 Uniqueness::Uniqueness()
 {
 	seenHosts = std::unordered_set<std::string>();
 	seenIps = std::unordered_set<DWORD>();
-	InitializeCriticalSection(&ip_mutex);
-	InitializeCriticalSection(&host_mutex);
+	InitializeCriticalSection(&ipMutex);
+	InitializeCriticalSection(&hostMutex);
 }
 
 
 Uniqueness::~Uniqueness()
 {
-	DeleteCriticalSection(&ip_mutex);
-	DeleteCriticalSection(&host_mutex);
+	DeleteCriticalSection(&ipMutex);
+	DeleteCriticalSection(&hostMutex);
 }

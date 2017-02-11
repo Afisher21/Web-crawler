@@ -10,12 +10,14 @@ class thread_safe_storage
 {
 private:
 	vector<string> data;
-	int next_read;
-	bool finished;
-	LPCRITICAL_SECTION mutex;
+	int nextRead;
+	CRITICAL_SECTION mutex;
 public:
-	void add(string input, bool last_value);
-	string read(void);
+	bool finished;
+	void add(string input);
+	int read(string &bind);
+	int size(void);
+	int remaining(void);
 	thread_safe_storage();
 	~thread_safe_storage();
 };

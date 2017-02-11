@@ -9,42 +9,56 @@ File:       thread_safe_storage.cpp
 
 
 
-void thread_safe_storage::add(string input, bool last_value)
+void thread_safe_storage::add(string input)
 {
-	EnterCriticalSection(mutex);
+	//EnterCriticalSection(&mutex);
 	data.push_back(input);
-	if (last_value)
-		finished = true;
-	LeaveCriticalSection(mutex);
+	//LeaveCriticalSection(&mutex);
 	
 }
 
-string thread_safe_storage::read(void)
+int thread_safe_storage::read(string &bind)
 {
-	EnterCriticalSection(mutex);
+	EnterCriticalSection(&mutex);
 	if (finished) {
-		LeaveCriticalSection(mutex);
-		return NULL;
+		LeaveCriticalSection(&mutex);
+		return -1;
 	}
-	if (next_read >= data.size()) {
-		// Need to try again since it was stuck reading
-		throw;
+	if (nextRead == data.size()) {
+		finished = true;
+		LeaveCriticalSection(&mutex);
+		return -1;
 	}
-	string result = data[next_read];
-	next_read++;
-	LeaveCriticalSection(mutex);
-	return result;
+	bind = data[nextRead];
+	nextRead++;
+	LeaveCriticalSection(&mutex);
+	return 0;
+}
+
+int thread_safe_storage::size(void)
+{
+	return data.size();
+}
+
+int thread_safe_storage::remaining(void)
+{
+	EnterCriticalSection(&mutex);
+	int read = nextRead==0?0:nextRead-1;
+	LeaveCriticalSection(&mutex);
+
+	return data.size() - read;
 }
 
 thread_safe_storage::thread_safe_storage()
 {
 	data = vector<string>();
-	next_read = 0;
-	InitializeCriticalSection(mutex);
+	nextRead = 0;
+	InitializeCriticalSection(&mutex);
 	finished = false;
 }
 
 
 thread_safe_storage::~thread_safe_storage()
 {
+	DeleteCriticalSection(&mutex);
 }

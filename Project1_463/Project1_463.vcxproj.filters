@@ -44,5 +44,8 @@
     <ClInclude Include="thread_safe_storage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="CommonStructs.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

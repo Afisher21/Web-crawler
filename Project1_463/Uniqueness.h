@@ -13,11 +13,13 @@ class Uniqueness
 private:
 	std::unordered_set<std::string> seenHosts;
 	std::unordered_set<DWORD> seenIps;
-	CRITICAL_SECTION ip_mutex;
-	CRITICAL_SECTION host_mutex;
+	CRITICAL_SECTION ipMutex;
+	CRITICAL_SECTION hostMutex;
 public:
 	bool IP(DWORD ip);
 	bool host(std::string host);
+	int ipCount(void);
+	int hostCount(void);
 	Uniqueness();
 	~Uniqueness();
 };
