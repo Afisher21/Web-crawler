@@ -27,8 +27,9 @@ bool Socket::Open(void)
 	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (sock == INVALID_SOCKET)
 	{
-		printf("socket() generated error %d\n", WSAGetLastError());
-		WSACleanup();
+		auto errorCode = WSAGetLastError();
+		if(errorCode == WSAEMFILE || errorCode == WSAENOBUFS)
+			printf("socket() generated error %d\n", errorCode);
 		return false;
 	}
 	return true;
@@ -150,7 +151,7 @@ void Socket::Refresh()
 	// Wipe old buffer, resize if too large
 	if (allocatedSize > 32000) {
 		delete[] buf;
-		buf = new char[INITIAL_BUF_SIZE];
+		buf = new(nothrow) char[INITIAL_BUF_SIZE];
 		if (buf == nullptr) {
 			printf("Unable to allocate memory for socket buffer!!!\n");
 			throw;
