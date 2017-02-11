@@ -6,11 +6,13 @@ File:       stdafx.h
 */
 #pragma once
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
+#define _CRTDBG_MAP_ALLOC   
 #include <vector>
 #include <stdio.h>
 #include <iostream>
 #include <string.h>
 #include <stdlib.h>
+#include <crtdbg.h> 
 #include <string>
 #include <WinSock2.h>
 #include <Windows.h>

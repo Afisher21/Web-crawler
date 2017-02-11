@@ -22,6 +22,7 @@ UINT url_crawler_thread(LPVOID pParam);
 
 int main(int argc, char **argv)
 {
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 	DWORD t_total = timeGetTime();
 	WSADATA wsaData;
 	string url = "";
@@ -347,8 +348,9 @@ UINT url_crawler_thread(LPVOID pParam)
 			nLinks = 0;
 		long linkCount = (long)nLinks;
 		p->addLink(linkCount);
+		//free(linkBuffer);
 	} while (true);
-
+	delete parser;
 
 
 	p->decrementThreadCount();

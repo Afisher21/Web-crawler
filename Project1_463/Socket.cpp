@@ -13,7 +13,7 @@ Socket::Socket()
 {
 	buf = new char[INITIAL_BUF_SIZE];
 	if (buf == nullptr) {
-		printf("Error allocating memory for Socket buffer!\n");
+		printf("Error allocating memory for creating a new Socket buffer!\n");
 		throw;
 	}
 	allocatedSize = INITIAL_BUF_SIZE;
@@ -39,10 +39,15 @@ bool Socket::Connect(int port)
 	// setup the port # and protocol type
 	server.sin_family = AF_INET;
 	server.sin_port = htons(port);		// host-to-network flips the byte order
-	
-	if (connect(sock, (struct sockaddr*) &server, sizeof(struct sockaddr_in)) == SOCKET_ERROR)
+	int connectResult = connect(sock, (struct sockaddr*) &server, sizeof(struct sockaddr_in));
+	if (connectResult == SOCKET_ERROR)
 	{
-		printf("failed with %d\n", WSAGetLastError());
+		auto error = WSAGetLastError();
+		if (error == 10060) {
+			// Server not listening on provided port. a.k.a. timeout
+			return false;
+		}
+		printf("connect failed with %d\n", error);
 		return false;
 	}
 
@@ -95,7 +100,7 @@ bool Socket::Read(int max_time, int max_size)
 		}
 		else if (ret == -1) {
 			// print WSAGetLastError()
-			printf("failed with %d\n", WSAGetLastError());
+			printf("select failed with %d\n", WSAGetLastError());
 			break;
 		}
 		else {
@@ -134,7 +139,7 @@ bool Socket::Write(const char message[])
 {
 	int res = send(sock, message, strlen(message), 0);
 	if (res == SOCKET_ERROR) {
-		printf("failed with %d\n", WSAGetLastError());
+		printf("send failed with %d\n", WSAGetLastError());
 		return false;
 	}
 	return true;
@@ -162,4 +167,5 @@ void Socket::Refresh()
 Socket::~Socket()
 {
 	closesocket(sock);
+	delete[] buf;
 }
