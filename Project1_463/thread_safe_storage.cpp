@@ -27,6 +27,7 @@ int thread_safe_storage::read(string &bind)
 	if (nextRead == data.size()) {
 		finished = true;
 		LeaveCriticalSection(&mutex);
+		nextRead++;
 		return -1;
 	}
 	bind = data[nextRead];

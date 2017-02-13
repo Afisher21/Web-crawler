@@ -158,6 +158,8 @@ UrlObj parse_url(string url)
 
 bool connect_verify(UrlObj & input, Socket &sock, string method, int &valid_code, int maximum_size, int maximum_time)
 {
+	int check_code = valid_code;
+	valid_code = -1;
 	// connect to the server on the requested port
 	if (!sock.Connect(input.port)) {
 		valid_code = -1;
@@ -186,10 +188,10 @@ bool connect_verify(UrlObj & input, Socket &sock, string method, int &valid_code
 		status_code = stoi(status + 9);
 	}
 	catch (...) {
-		valid_code = 0;
+		valid_code = -1;
 		return false;
 	}
-	if (status_code < valid_code || status_code >= valid_code + 100) {
+	if (status_code < check_code || status_code >= check_code + 100) {
 		valid_code = status_code;
 		return false;
 	}
@@ -208,10 +210,6 @@ UINT status_thread(LPVOID pParam)
 	DWORD prevTime = 0;
 	DWORD startTime = timeGetTime();
 	while (!p->urls.finished || p->threadCount()>0) {
-		// It takes a few milliseconds for the above code to run, so sleep until the next wakeup would occur at 2 seconds
-		// This does not account for timing errors like the computer waking the program after 2050 ms when 2000 was requested
-		DWORD sleepTime = 2000;
-		Sleep(sleepTime);
 		/// Variables:
 		/*
 		First column is elapsed time in seconds, 3 character alignment
@@ -229,11 +227,11 @@ UINT status_thread(LPVOID pParam)
 		double deltaSeconds = timeSinceInitialized - prevTime; // Amount of seconds since last wakeup
 		int remaining = p->urls.remaining();
 		long downloadedBytes = p->downloadedBytes();
-		long bps = (downloadedBytes - prevDownloaded)/ deltaSeconds; // bytes downloaded since last check
-		long _Mbps = (bps * 8) / 1000000; // convert MB to b
+		double bps = (downloadedBytes == 0) ? 0 : (double)(downloadedBytes - prevDownloaded)/ deltaSeconds; // bytes downloaded since last check
+		double _Mbps = (bps * 8) / 1000000; // convert MB to b
 		int extractedPages = p->totalPages();
-		double pagesPerSecond = (deltaSeconds == 0)?0:(extractedPages - prevExtractedPages) / deltaSeconds;
-		printf("[%3.0f]  %ld  Q %6d  E %7d  H %6d  D %6ld  I %5d  R %5ld  C %5ld L %4ld\n\t*** crawling %.1d pps @ %.1ld Mbps\n",
+		double pagesPerSecond = (deltaSeconds == 0)?0:(double)(extractedPages - prevExtractedPages) / deltaSeconds;
+		printf("[%3.0f]  %ld  Q %6d  E %7d  H %6d  D %6ld  I %5d  R %5ld  C %5ld L %4ld\n\t*** crawling %.1f pps @ %.1f Mbps\n",
 			timeSinceInitialized,								// [%3f]   Elapsed time
 			p->threadCount(),									//		   Number of threads currently running
 			remaining,											// Q	   Size of pending queue
@@ -250,21 +248,25 @@ UINT status_thread(LPVOID pParam)
 		prevDownloaded = downloadedBytes;
 		prevExtractedPages = extractedPages;
 		prevTime = timeSinceInitialized;
+		// It takes a few milliseconds for the above code to run, so sleep until the next wakeup would occur at 2 seconds
+		// This does not account for timing errors like the computer waking the program after 2050 ms when 2000 was requested
+		DWORD sleepTime = 2000;
+		Sleep(sleepTime);
 	}
 
 	// Print final stats
 	DWORD finalTime = (timeGetTime() - startTime)/1000;
-	DWORD rate = p->urls.size() / finalTime;
+	double rate = p->urls.size() / finalTime;
 	printf("Total elapsed time: %.2ds\n", finalTime);
-	printf("Extracted %d URLs @ %.1ld/s\n",p->urls.size(), rate);
-	rate = p->succesfulDnsCount() / finalTime;
-	printf("Looked up %d DNS names @ %.1d/s\n", p->succesfulDnsCount(), rate);
-	rate = p->succesfulRobotCount() / finalTime;
-	printf("Downloaded %d robots @ %.1ld/s\n", p->succesfulRobotCount(), rate);
-	rate = p->totalPages() / finalTime;
-	printf("Crawled %d pages @ %.1ld/s\n", p->totalPages(), rate);
-	rate = p->totalLinkCount() / finalTime;
-	printf("Parsed %d links @ %.1ld/s\n", p->totalLinkCount(), rate);
+	printf("Extracted %d URLs @ %.1f/s\n",p->urls.size(), rate);
+	rate = (double)(p->succesfulDnsCount() )/ finalTime;
+	printf("Looked up %d DNS names @ %.1f/s\n", p->succesfulDnsCount(), rate);
+	rate = (double)(p->succesfulRobotCount() )/ finalTime;
+	printf("Downloaded %d robots @ %.1f/s\n", p->succesfulRobotCount(), rate);
+	rate = (double)(p->totalPages()) / finalTime;
+	printf("Crawled %d pages @ %.1f/s\n", p->totalPages(), rate);
+	rate = (double)(p->totalLinkCount()) / finalTime;
+	printf("Parsed %d links @ %.1f/s\n", p->totalLinkCount(), rate);
 	printf("HTTP codes: 2xx = %d, 3xx = %d, 4xx = %d, 5xx = %d, other = %d\n", p->totalTwoHundredCount(),
 		p->totalThreeHundredCount(), p->totalFourHundredCount(),
 		p->totalFiveHundredCount(),p->totalOtherCount());
@@ -342,7 +344,6 @@ UINT url_crawler_thread(LPVOID pParam)
 		// Parse page for links
 		int nLinks;
 		char *linkBuffer = parser->Parse(sock.buf, sock.curPos, _strdup(url.c_str()), url.size(), &nLinks);
-
 		// check for errors indicated by negative values
 		if (nLinks < 0)
 			nLinks = 0;
