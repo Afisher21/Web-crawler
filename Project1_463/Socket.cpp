@@ -13,7 +13,7 @@ Socket::Socket()
 {
 	buf = new char[INITIAL_BUF_SIZE];
 	if (buf == nullptr) {
-		printf("Error allocating memory for creating a new Socket buffer!\n");
+		//printf("Error allocating memory for creating a new Socket buffer!\n");
 		throw;
 	}
 	allocatedSize = INITIAL_BUF_SIZE;
@@ -29,7 +29,7 @@ bool Socket::Open(void)
 	{
 		auto errorCode = WSAGetLastError();
 		if(errorCode == WSAEMFILE || errorCode == WSAENOBUFS)
-			printf("socket() generated error %d\n", errorCode);
+			//printf("socket() generated error %d\n", errorCode);
 		return false;
 	}
 	return true;
@@ -48,7 +48,7 @@ bool Socket::Connect(int port)
 			// Server not listening on provided port. a.k.a. timeout
 			return false;
 		}
-		printf("connect failed with %d\n", error);
+		//printf("connect failed with %d\n", error);
 		return false;
 	}
 
@@ -82,7 +82,7 @@ bool Socket::Read(int max_time, int max_size)
 			// Available size -1 so there is room for a null termination.
 			int bytes = recv(sock, buf + curPos, allocatedSize - curPos -1 , 0);
 			if (bytes == SOCKET_ERROR) {
-				printf("failed with %d on recv\n", WSAGetLastError());
+				//printf("failed with %d on recv\n", WSAGetLastError());
 				return false;
 			}
 			if (bytes == 0) {
@@ -101,7 +101,7 @@ bool Socket::Read(int max_time, int max_size)
 		}
 		else if (ret == -1) {
 			// print WSAGetLastError()
-			printf("select failed with %d\n", WSAGetLastError());
+			//printf("select failed with %d\n", WSAGetLastError());
 			break;
 		}
 		else {
@@ -140,7 +140,7 @@ bool Socket::Write(const char message[])
 {
 	int res = send(sock, message, strlen(message), 0);
 	if (res == SOCKET_ERROR) {
-		printf("send failed with %d\n", WSAGetLastError());
+		//printf("send failed with %d\n", WSAGetLastError());
 		return false;
 	}
 	return true;
@@ -153,7 +153,7 @@ void Socket::Refresh()
 		delete[] buf;
 		buf = new(nothrow) char[INITIAL_BUF_SIZE];
 		if (buf == nullptr) {
-			printf("Unable to allocate memory for socket buffer!!!\n");
+			//printf("Unable to allocate memory for socket buffer!!!\n");
 			throw;
 		}
 		allocatedSize = INITIAL_BUF_SIZE;
@@ -167,6 +167,7 @@ void Socket::Refresh()
 
 Socket::~Socket()
 {
-	closesocket(sock);
+	if(sock != INVALID_SOCKET)
+		closesocket(sock);
 	delete[] buf;
 }
